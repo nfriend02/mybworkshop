@@ -3,13 +3,17 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../shared/api/nlp_action.dart';
 import '../../../shared/utils/download_file.dart';
+import '../../../shared/utils/image_sniff.dart';
 import '../../../shared/utils/pick_files.dart';
 import '../../../shared/utils/record_job.dart';
 import '../../../shared/widgets/feature_scaffold.dart';
+import '../../../shared/widgets/go_button.dart';
 import '../../../shared/widgets/nlp_request_bar.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/upload_drop_zone.dart';
+import '../../../shared/widgets/waiting_job_tile.dart';
 import '../domain/avatar_render.dart';
 import '../domain/gemini_bridge.dart';
 
@@ -26,23 +30,40 @@ class _AiAvatarViewState extends State<AiAvatarView> {
   Uint8List? _local;
   Uint8List? _gemini;
   var _busy = false;
+  var _started = false;
   String? _note;
 
   Future<void> _load(List<PickedBytes> files) async {
     final file = files.first;
+    final kind = imageKindOf(file.bytes, name: file.name, mimeType: file.mimeType);
+    if (kind == ImageKind.heic || kind == ImageKind.unknown) {
+      setState(() => _note = kind == ImageKind.heic ? heicUploadMessage : '이미지를 찾지 못했어요. PNG, JPG, GIF, WEBP를 올려 주세요');
+      return;
+    }
     setState(() {
-      _photo = file;
+      _photo = PickedBytes(name: ensureImageName(file.name, kind), bytes: file.bytes, mimeType: file.mimeType);
       _gemini = null;
-      _local = renderAvatar(file.bytes, _style);
+      _local = null;
+      _started = false;
+      _note = null;
     });
   }
 
   Future<void> _make() async {
     final photo = _photo;
     if (photo == null || _busy) return;
+    late final Uint8List rendered;
+    try {
+      rendered = renderAvatar(photo.bytes, _style);
+    } catch (error) {
+      setState(() => _note = '사진을 읽지 못했어요. PNG, JPG, GIF, WEBP를 올려 주세요');
+      return;
+    }
     setState(() {
       _busy = true;
-      _local = renderAvatar(photo.bytes, _style);
+      _started = true;
+      _local = rendered;
+      _note = null;
     });
     try {
       final style = kAvatarStyleLabels[_style]!;
@@ -92,27 +113,28 @@ class _AiAvatarViewState extends State<AiAvatarView> {
               filename: _photo?.name ?? 'avatar.png',
             ),
             onAnswer: (answer) async {
-              final style = avatarStyleFromName(answer.text);
+              final action = NlpAction.tryParse(answer.text);
+              final style = avatarStyleFromName(action?.style ?? answer.text);
               setState(() {
-                if (kAvatarStyleLabels.containsValue(answer.text.trim())) {
-                  _style = style;
-                }
-                if (answer.hasImage) _gemini = answer.imageBytes;
+                if (action != null && action.style.isNotEmpty) _style = style;
                 _note = answer.text.trim().isEmpty ? null : answer.text.trim();
-                if (_photo != null) _local = renderAvatar(_photo!.bytes, _style);
               });
             },
           ),
           const SizedBox(height: 12),
-          if (_photo == null)
-            UploadDropZone(
-              title: '얼굴 사진을 놓아요',
-              subtitle: '스타일을 고른 뒤 아바타를 만들어요',
-              buttonLabel: 'Select File',
-              onPicked: _load,
-              accent: const Color(0xFFF3D6FF),
-            )
-          else ...[
+          UploadDropZone(
+            title: '얼굴 사진을 놓아요',
+            subtitle: '스타일을 고른 뒤 GO를 누르면 아바타가 나와요',
+            buttonLabel: 'Select File',
+            onPicked: _load,
+            accent: const Color(0xFFF3D6FF),
+            sideAction: GoButton(
+              busy: _busy,
+              onPressed: _photo == null ? null : _make,
+            ),
+          ),
+          if (_photo != null) ...[
+            const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               children: [
@@ -122,40 +144,46 @@ class _AiAvatarViewState extends State<AiAvatarView> {
                     selected: _style == entry.key,
                     onSelected: (_) => setState(() {
                       _style = entry.key;
-                      _local = renderAvatar(_photo!.bytes, _style);
                       _gemini = null;
                     }),
                   ),
               ],
             ),
             const SizedBox(height: 12),
-            if (preview != null)
-              SectionCard(
-                child: Column(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(24),
-                      child: Image.memory(preview, height: 260, fit: BoxFit.contain),
+            if (!_started)
+              WaitingJobTile(name: _photo!.name, preview: _photo!.bytes, progress: 0),
+          ],
+          if (_started && preview != null) ...[
+            const SizedBox(height: 12),
+            SectionCard(
+              child: Column(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: Image.memory(preview, height: 260, fit: BoxFit.contain),
+                  ),
+                  const SizedBox(height: 8),
+                  WaitingJobTile(
+                    name: '아바타 · ${kAvatarStyleLabels[_style]}',
+                    preview: preview,
+                    progress: _busy ? null : 1,
+                    trailing: IconButton(
+                      tooltip: '다운로드',
+                      onPressed: () => downloadFile(context, bytes: preview, filename: 'avatar.png', mimeType: 'image/png'),
+                      icon: const Icon(Icons.download_rounded),
                     ),
+                  ),
+                  if (_note != null) ...[
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        FilledButton(onPressed: _busy ? null : _make, child: Text(_busy ? '만드는 중' : '아바타 만들기')),
-                        const SizedBox(width: 8),
-                        FilledButton.icon(
-                          onPressed: () => downloadFile(context, bytes: preview, filename: 'avatar.png', mimeType: 'image/png'),
-                          icon: const Icon(Icons.download_rounded),
-                          label: const Text('다운로드'),
-                        ),
-                      ],
-                    ),
-                    if (_note != null) ...[
-                      const SizedBox(height: 8),
-                      Text(_note!, style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w600)),
-                    ],
+                    Text(_note!, style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w600)),
                   ],
-                ),
+                ],
               ),
+            ),
+          ],
+          if (_photo == null && _note != null) ...[
+            const SizedBox(height: 8),
+            Text(_note!, style: GoogleFonts.notoSansKr(color: const Color(0xFFE36A6A), fontWeight: FontWeight.w700)),
           ],
         ],
       ),

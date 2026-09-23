@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../api/gemini_client.dart';
+import '../api/local_action.dart';
 import '../config/app_config.dart';
 import '../utils/record_job.dart';
 
@@ -46,7 +48,8 @@ class _NlpRequestBarState extends State<NlpRequestBar> {
     try {
       final answer = await widget.ask(request);
       if (!mounted) return;
-      setState(() => _answer = answer.text.trim().isEmpty ? '응답이 비어 있어요.' : answer.text.trim());
+      final shown = readableAnswer(answer.text.trim());
+      setState(() => _answer = shown.isEmpty ? '응답이 비어 있어요.' : shown);
       await recordJob(
         context,
         tool: widget.tool,
@@ -136,13 +139,31 @@ class _NlpRequestBarState extends State<NlpRequestBar> {
             ),
             if (_answer != null) ...[
               const SizedBox(height: 8),
-              Text(
-                _answer!,
-                style: GoogleFonts.notoSansKr(
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.ink,
-                  height: 1.45,
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: SelectableText(
+                      _answer!,
+                      style: GoogleFonts.notoSansKr(
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.ink,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '복사',
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: _answer!));
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('요청 글을 복사했어요')),
+                      );
+                    },
+                    icon: const Icon(Icons.copy_rounded),
+                  ),
+                ],
               ),
             ],
           ],

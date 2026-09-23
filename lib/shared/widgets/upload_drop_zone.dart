@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../app/theme/app_theme.dart';
+import '../utils/image_sniff.dart';
 import '../utils/pick_files.dart';
 
 class UploadDropZone extends StatefulWidget {
@@ -16,6 +17,7 @@ class UploadDropZone extends StatefulWidget {
     this.multiple = false,
     this.type = FileType.any,
     this.accent = AppTheme.peach,
+    this.sideAction,
   });
 
   final String title;
@@ -25,6 +27,7 @@ class UploadDropZone extends StatefulWidget {
   final bool multiple;
   final FileType type;
   final Color accent;
+  final Widget? sideAction;
 
   @override
   State<UploadDropZone> createState() => _UploadDropZoneState();
@@ -50,6 +53,31 @@ class _UploadDropZoneState extends State<UploadDropZone> {
     await _emit(files);
   }
 
+  Future<List<PickedBytes>> _readDropped(List<DropItem> items) async {
+    final picked = <PickedBytes>[];
+    for (final item in items) {
+      await _readItem(item, picked);
+    }
+    return picked;
+  }
+
+  Future<void> _readItem(DropItem item, List<PickedBytes> picked) async {
+    if (item is DropItemDirectory) {
+      for (final child in item.children) {
+        await _readItem(child, picked);
+      }
+      return;
+    }
+    final bytes = await item.readAsBytes();
+    final mime = item.mimeType;
+    var name = item.name.trim();
+    if (name.isEmpty) {
+      final kind = imageKindOf(bytes, mimeType: mime);
+      name = kind == ImageKind.unknown ? 'file' : ensureImageName('image', kind);
+    }
+    picked.add(PickedBytes(name: name, bytes: bytes, mimeType: mime));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -60,10 +88,7 @@ class _UploadDropZoneState extends State<UploadDropZone> {
           onDragExited: (_) => setState(() => _over = false),
           onDragDone: (detail) async {
             setState(() => _over = false);
-            final picked = <PickedBytes>[];
-            for (final file in detail.files) {
-              picked.add(PickedBytes(name: file.name, bytes: await file.readAsBytes()));
-            }
+            final picked = await _readDropped(detail.files);
             await _emit(picked);
           },
           child: AnimatedContainer(
@@ -108,13 +133,16 @@ class _UploadDropZoneState extends State<UploadDropZone> {
           ),
         ),
         const SizedBox(height: 10),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            onPressed: _busy ? null : _pick,
-            icon: const Icon(Icons.folder_open_rounded),
-            label: Text(widget.buttonLabel),
-          ),
+        Row(
+          children: [
+            FilledButton.icon(
+              onPressed: _busy ? null : _pick,
+              icon: const Icon(Icons.folder_open_rounded),
+              label: Text(widget.buttonLabel),
+            ),
+            const Spacer(),
+            if (widget.sideAction != null) widget.sideAction!,
+          ],
         ),
       ],
     );

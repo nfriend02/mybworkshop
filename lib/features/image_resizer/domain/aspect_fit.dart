@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:image/image.dart' as img;
 
+import '../../../shared/utils/image_sniff.dart';
+
 enum FitMode { padding, crop }
 
 class AspectChoice {
@@ -25,13 +27,7 @@ const List<AspectChoice> kAspectChoices = [
 ];
 
 bool isImageName(String name) {
-  final lower = name.toLowerCase();
-  return lower.endsWith('.png') ||
-      lower.endsWith('.jpg') ||
-      lower.endsWith('.jpeg') ||
-      lower.endsWith('.gif') ||
-      lower.endsWith('.webp') ||
-      lower.endsWith('.bmp');
+  return imageKindOf(Uint8List(0), name: name) != ImageKind.unknown;
 }
 
 (int, int) boxForAspect(double aspect, {int longSide = 1080}) {
@@ -97,10 +93,13 @@ List<UnzippedImage> unzipImages(Uint8List bytes) {
   final archive = ZipDecoder().decodeBytes(bytes);
   final images = <UnzippedImage>[];
   for (final file in archive.files) {
-    if (!file.isFile || !isImageName(file.name)) continue;
-    final name = file.name.split('/').last;
+    if (!file.isFile) continue;
+    final bytes = file.content;
+    final kind = imageKindOf(bytes, name: file.name);
+    if (kind == ImageKind.unknown) continue;
+    final name = ensureImageName(file.name.split('/').last, kind);
     if (name.isEmpty) continue;
-    images.add(UnzippedImage(name: name, bytes: file.content));
+    images.add(UnzippedImage(name: name, bytes: bytes));
   }
   return images;
 }

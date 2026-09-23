@@ -149,7 +149,11 @@ class _WorkshopFeedState extends State<_WorkshopFeed> {
     final firestore = context.read<FirestoreService?>();
     if (firestore == null) return;
     try {
-      final rows = await firestore.listPage(collection: 'jobs', limit: 30);
+      final rows = await firestore.listPage(
+        collection: 'jobs',
+        status: null,
+        limit: 30,
+      );
       if (!mounted) return;
       setState(() {
         _jobs = rows.map(WorkshopJob.fromMap).toList();

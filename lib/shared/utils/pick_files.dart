@@ -3,10 +3,11 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 
 class PickedBytes {
-  const PickedBytes({required this.name, required this.bytes});
+  const PickedBytes({required this.name, required this.bytes, this.mimeType});
 
   final String name;
   final Uint8List bytes;
+  final String? mimeType;
 }
 
 /// Reads picked files into memory. An empty list means the user cancelled.

@@ -1,16 +1,21 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../shared/utils/byte_label.dart';
 import '../../../shared/utils/download_file.dart';
+import '../../../shared/utils/image_sniff.dart';
 import '../../../shared/utils/pick_files.dart';
 import '../../../shared/utils/record_job.dart';
 import '../../../shared/widgets/feature_scaffold.dart';
+import '../../../shared/widgets/go_button.dart';
 import '../../../shared/widgets/nlp_request_bar.dart';
 import '../../../shared/widgets/scroll_paged_list.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/upload_drop_zone.dart';
+import '../../../shared/widgets/waiting_job_tile.dart';
 import '../domain/document_compress.dart';
 import '../domain/gemini_bridge.dart';
 
@@ -33,15 +38,31 @@ class DocumentCompressorView extends StatefulWidget {
 
 class _DocumentCompressorViewState extends State<DocumentCompressorView> {
   final List<_Doc> _docs = [];
+  var _busy = false;
+  var _started = false;
 
   Future<void> _load(List<PickedBytes> files) async {
     final docs = [for (final file in files) _Doc(name: file.name, source: file)];
     setState(() {
+      _started = false;
       _docs
         ..clear()
         ..addAll(docs);
     });
-    for (final doc in docs) {
+  }
+
+  Future<void> _compress() async {
+    if (_busy || _docs.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _started = true;
+      for (final doc in _docs) {
+        doc.progress = 0;
+        doc.output = null;
+        doc.blocked = null;
+      }
+    });
+    for (final doc in _docs) {
       setState(() => doc.progress = 0.4);
       await Future<void>.delayed(Duration.zero);
       try {
@@ -56,7 +77,8 @@ class _DocumentCompressorViewState extends State<DocumentCompressorView> {
       }
       if (mounted) setState(() {});
     }
-    final saved = docs.where((doc) => doc.output != null).length;
+    if (mounted) setState(() => _busy = false);
+    final saved = _docs.where((doc) => doc.output != null).length;
     if (!mounted || saved == 0) return;
     await recordJob(
       context,
@@ -67,11 +89,19 @@ class _DocumentCompressorViewState extends State<DocumentCompressorView> {
     );
   }
 
+  Uint8List? _preview(_Doc doc) {
+    final bytes = doc.output?.bytes ?? doc.source.bytes;
+    final name = doc.output?.name ?? doc.source.name;
+    final kind = imageKindOf(bytes, name: name, mimeType: doc.source.mimeType);
+    if (kind == ImageKind.unknown || kind == ImageKind.heic) return null;
+    return bytes;
+  }
+
   @override
   Widget build(BuildContext context) {
     return FeatureScaffold(
       title: '문서 압축',
-      subtitle: '올리면 _comp 이름으로 바로 줄여요',
+      subtitle: 'GO를 누르면 _comp 이름으로 줄여요',
       emoji: '📦',
       accent: AppTheme.sky,
       scrollable: false,
@@ -91,45 +121,70 @@ class _DocumentCompressorViewState extends State<DocumentCompressorView> {
             multiple: true,
             onPicked: _load,
             accent: AppTheme.sky,
+            sideAction: GoButton(
+              busy: _busy,
+              onPressed: _docs.isEmpty ? null : _compress,
+            ),
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: ScrollPagedList<_Doc>(
-              items: _docs,
-              emptyMessage: '아직 압축한 파일이 없어요',
-              itemBuilder: (context, doc, index) => SectionCard(
-                padding: const EdgeInsets.all(12),
-                color: doc.blocked == null ? AppTheme.surface : AppTheme.butter,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(doc.name, style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 6),
-                    LinearProgressIndicator(value: doc.progress == 0 ? null : doc.progress),
-                    const SizedBox(height: 6),
-                    if (doc.blocked != null)
-                      Text(doc.blocked!, style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w800, color: AppTheme.ink))
-                    else if (doc.output != null) ...[
-                      Text(
-                        '${doc.output!.name} · ${byteLabel(doc.output!.bytes.length)} · ${doc.output!.note}',
-                        style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 8),
-                      FilledButton.icon(
-                        onPressed: () => downloadFile(
-                          context,
-                          bytes: doc.output!.bytes,
-                          filename: doc.output!.name,
-                          mimeType: mimeForName(doc.output!.name),
-                        ),
-                        icon: const Icon(Icons.download_rounded),
-                        label: const Text('다운로드'),
-                      ),
+            child: !_started
+                ? ListView(
+                    children: [
+                      for (final doc in _docs) ...[
+                        WaitingJobTile(name: doc.name, preview: _preview(doc), progress: 0),
+                        const SizedBox(height: 8),
+                      ],
                     ],
-                  ],
-                ),
-              ),
-            ),
+                  )
+                : ScrollPagedList<_Doc>(
+                    items: _docs,
+                    emptyMessage: '아직 압축한 파일이 없어요',
+                    itemBuilder: (context, doc, index) => SectionCard(
+                      padding: const EdgeInsets.all(12),
+                      color: doc.blocked == null ? AppTheme.surface : AppTheme.butter,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              if (_preview(doc) != null)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Image.memory(_preview(doc)!, width: 56, height: 56, fit: BoxFit.cover),
+                                )
+                              else
+                                const Icon(Icons.insert_drive_file_rounded),
+                              const SizedBox(width: 10),
+                              Expanded(child: Text(doc.name, style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w800))),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          LinearProgressIndicator(value: doc.progress, minHeight: 8, borderRadius: BorderRadius.circular(8)),
+                          const SizedBox(height: 6),
+                          if (doc.blocked != null)
+                            Text(doc.blocked!, style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w800, color: AppTheme.ink))
+                          else if (doc.output != null) ...[
+                            Text(
+                              '${doc.output!.name} · ${byteLabel(doc.output!.bytes.length)} · ${doc.output!.note}',
+                              style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 8),
+                            FilledButton.icon(
+                              onPressed: () => downloadFile(
+                                context,
+                                bytes: doc.output!.bytes,
+                                filename: doc.output!.name,
+                                mimeType: mimeForName(doc.output!.name),
+                              ),
+                              icon: const Icon(Icons.download_rounded),
+                              label: const Text('다운로드'),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),

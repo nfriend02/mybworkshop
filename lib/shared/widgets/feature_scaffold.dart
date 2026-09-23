@@ -12,6 +12,7 @@ class FeatureScaffold extends StatelessWidget {
     required this.accent,
     required this.child,
     this.scrollable = true,
+    this.showHeader = true,
   });
 
   final String title;
@@ -20,6 +21,9 @@ class FeatureScaffold extends StatelessWidget {
   final Color accent;
   final Widget child;
   final bool scrollable;
+
+  /// After a GIF is open, the page title gives the canvas the full height.
+  final bool showHeader;
 
   @override
   Widget build(BuildContext context) {
@@ -68,8 +72,10 @@ class FeatureScaffold extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          header,
-          const SizedBox(height: 16),
+          if (showHeader) ...[
+            header,
+            const SizedBox(height: 16),
+          ],
           Expanded(child: child),
         ],
       );

@@ -7,13 +7,15 @@ import '../../../app/theme/app_theme.dart';
 import '../../../shared/api/gemini_client.dart';
 import '../../../shared/api/nlp_action.dart';
 import '../../../shared/utils/download_file.dart';
+import '../../../shared/utils/image_sniff.dart';
 import '../../../shared/utils/pick_files.dart';
 import '../../../shared/utils/record_job.dart';
 import '../../../shared/widgets/feature_scaffold.dart';
+import '../../../shared/widgets/go_button.dart';
 import '../../../shared/widgets/nlp_request_bar.dart';
 import '../../../shared/widgets/scroll_paged_list.dart';
-import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/upload_drop_zone.dart';
+import '../../../shared/widgets/waiting_job_tile.dart';
 import '../../document_compressor/domain/zip_compressor.dart';
 import '../domain/aspect_fit.dart';
 import '../domain/gemini_bridge.dart';
@@ -42,6 +44,8 @@ class _ImageResizerViewState extends State<ImageResizerView> {
   final _height = TextEditingController(text: '1080');
   final List<_Item> _items = [];
   var _busy = false;
+  var _started = false;
+  String? _notice;
 
   @override
   void dispose() {
@@ -54,8 +58,19 @@ class _ImageResizerViewState extends State<ImageResizerView> {
     final action = NlpAction.tryParse(answer.text);
     if (action == null) return;
     final ratio = kAspectChoices.where((item) => item.label == action.ratio).firstOrNull;
+    final custom = RegExp(r'(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)').firstMatch(action.ratio ?? '');
     setState(() {
-      if (ratio != null) _ratio = ratio;
+      if (ratio != null && ratio.label != 'Custom') {
+        _ratio = ratio;
+      } else if (custom != null) {
+        final width = double.tryParse(custom.group(1)!);
+        final height = double.tryParse(custom.group(2)!);
+        if (width != null && height != null && width > 0 && height > 0) {
+          _ratio = kAspectChoices.last;
+          _width.text = (width * 100).round().toString();
+          _height.text = (height * 100).round().toString();
+        }
+      }
       if (action.mode == 'crop') _mode = FitMode.crop;
       if (action.mode == 'padding') _mode = FitMode.padding;
     });
@@ -63,27 +78,44 @@ class _ImageResizerViewState extends State<ImageResizerView> {
 
   Future<void> _load(List<PickedBytes> files) async {
     final expanded = <_Item>[];
+    final notes = <String>[];
     for (final file in files) {
-      if (file.name.toLowerCase().endsWith('.zip')) {
-        for (final image in unzipImages(file.bytes)) {
+      if (isZipPayload(file.bytes, file.name)) {
+        final images = unzipImages(file.bytes);
+        if (images.isEmpty) {
+          notes.add('ZIP 안에서 이미지를 찾지 못했어요');
+        }
+        for (final image in images) {
           expanded.add(_Item(name: image.name, source: image.bytes));
         }
-      } else if (isImageName(file.name)) {
-        expanded.add(_Item(name: file.name, source: file.bytes));
+        continue;
       }
+      final kind = imageKindOf(file.bytes, name: file.name, mimeType: file.mimeType);
+      if (kind == ImageKind.heic) {
+        notes.add(heicUploadMessage);
+        continue;
+      }
+      if (kind == ImageKind.unknown) {
+        notes.add('이미지를 찾지 못했어요. PNG, JPG, GIF, WEBP를 올려 주세요');
+        continue;
+      }
+      expanded.add(_Item(name: ensureImageName(file.name, kind), source: file.bytes));
     }
     if (expanded.isEmpty) {
-      setState(() => _items
-        ..clear()
-        ..add(_Item(name: '이미지를 찾지 못했어요', source: Uint8List(0))..error = 'PNG, JPG, GIF 또는 그 이미지들이 들어 있는 ZIP을 올려 주세요'));
+      setState(() {
+        _notice = notes.isEmpty ? '이미지를 찾지 못했어요. PNG, JPG, GIF, WEBP를 올려 주세요' : notes.join('\n');
+        _items.clear();
+        _started = false;
+      });
       return;
     }
     setState(() {
+      _notice = notes.isEmpty ? null : notes.join('\n');
+      _started = false;
       _items
         ..clear()
         ..addAll(expanded);
     });
-    await _run();
   }
 
   (int, int) _box() {
@@ -97,7 +129,15 @@ class _ImageResizerViewState extends State<ImageResizerView> {
 
   Future<void> _run() async {
     if (_busy || _items.isEmpty) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _started = true;
+      for (final item in _items) {
+        item.progress = 0;
+        item.output = null;
+        item.error = null;
+      }
+    });
     final box = _box();
     for (final item in _items) {
       if (item.source.isEmpty) continue;
@@ -204,14 +244,22 @@ class _ImageResizerViewState extends State<ImageResizerView> {
                 ),
                 UploadDropZone(
                   title: '이미지나 ZIP을 놓아요',
-                  subtitle: 'ZIP은 풀려서 장마다 진행률이 보여요',
+                  subtitle: '올린 뒤 GO를 누르면 변환해요',
                   buttonLabel: 'Select Files',
                   multiple: true,
                   onPicked: _load,
                   accent: AppTheme.mint,
+                  sideAction: GoButton(
+                    busy: _busy,
+                    onPressed: _items.isEmpty ? null : _run,
+                  ),
                 ),
-                const SizedBox(height: 12),
-                if (_items.isNotEmpty)
+                if (_notice != null) ...[
+                  const SizedBox(height: 12),
+                  Text(_notice!, style: GoogleFonts.notoSansKr(color: AppTheme.coral, fontWeight: FontWeight.w800)),
+                ],
+                if (_items.any((item) => item.output != null)) ...[
+                  const SizedBox(height: 12),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: FilledButton.icon(
@@ -220,15 +268,23 @@ class _ImageResizerViewState extends State<ImageResizerView> {
                       label: const Text('전체 ZIP 다운로드'),
                     ),
                   ),
+                ],
+                if (!_started && _items.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  for (final item in _items) ...[
+                    _tile(item, allowDownload: false),
+                    const SizedBox(height: 8),
+                  ],
+                ],
               ],
             ),
           ),
-          if (_items.isNotEmpty)
+          if (_started && _items.isNotEmpty)
             SizedBox(
               height: 280,
               child: ScrollPagedList<_Item>(
                 items: _items,
-                itemBuilder: (context, item, index) => _tile(item),
+                itemBuilder: (context, item, index) => _tile(item, allowDownload: true),
               ),
             ),
         ],
@@ -236,33 +292,14 @@ class _ImageResizerViewState extends State<ImageResizerView> {
     );
   }
 
-  Widget _tile(_Item item) {
-    return SectionCard(
-      padding: const EdgeInsets.all(10),
-      child: Row(
-        children: [
-          if (item.output != null)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.memory(item.output!, width: 56, height: 56, fit: BoxFit.cover),
-            )
-          else
-            const SizedBox(width: 56, height: 56, child: Icon(Icons.image_rounded)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 6),
-                LinearProgressIndicator(value: item.progress == 0 ? null : item.progress, minHeight: 8, borderRadius: BorderRadius.circular(8)),
-                if (item.error != null)
-                  Text(item.error!, style: GoogleFonts.notoSansKr(color: AppTheme.coral, fontSize: 12)),
-              ],
-            ),
-          ),
-          if (item.output != null)
-            IconButton(
+  Widget _tile(_Item item, {required bool allowDownload}) {
+    return WaitingJobTile(
+      name: item.name,
+      preview: item.output ?? item.source,
+      progress: item.progress,
+      detail: item.error,
+      trailing: allowDownload && item.output != null
+          ? IconButton(
               tooltip: '다운로드',
               onPressed: () => downloadFile(
                 context,
@@ -271,9 +308,8 @@ class _ImageResizerViewState extends State<ImageResizerView> {
                 mimeType: 'image/png',
               ),
               icon: const Icon(Icons.download_rounded),
-            ),
-        ],
-      ),
+            )
+          : null,
     );
   }
 }

@@ -9,6 +9,7 @@ import '../../../shared/utils/capture_png.dart';
 import '../../../shared/utils/download_file.dart';
 import '../../../shared/utils/record_job.dart';
 import '../../../shared/widgets/feature_scaffold.dart';
+import '../../../shared/widgets/go_button.dart';
 import '../../../shared/widgets/nlp_request_bar.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../domain/gemini_bridge.dart';
@@ -47,7 +48,6 @@ class _QrGeneratorViewState extends State<QrGeneratorView> {
       _kind = qrKindFromName(action.kind);
       if (action.text.isNotEmpty) _text.text = action.text;
     });
-    await _make();
   }
 
   Future<void> _make() async {
@@ -147,8 +147,8 @@ class _QrGeneratorViewState extends State<QrGeneratorView> {
             ),
           const SizedBox(height: 8),
           Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton(onPressed: _make, child: const Text('QR 만들기')),
+            alignment: Alignment.centerRight,
+            child: GoButton(onPressed: _make),
           ),
           if (_payload != null) ...[
             const SizedBox(height: 12),

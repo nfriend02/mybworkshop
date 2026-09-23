@@ -65,16 +65,18 @@ class FirestoreService {
   }
 
   /// Client-safe page. Falls back to an unordered read if the composite
-  /// index is still building.
+  /// index is still building. A null [status] returns every recent document.
   Future<List<Map<String, dynamic>>> listPage({
     required String collection,
-    String status = 'active',
+    String? status = 'active',
     int limit = 10,
   }) async {
     try {
-      final snap = await _db
-          .collection(collection)
-          .where('status', isEqualTo: status)
+      Query<Map<String, dynamic>> query = _db.collection(collection);
+      if (status != null) {
+        query = query.where('status', isEqualTo: status);
+      }
+      final snap = await query
           .orderBy('createdAt', descending: true)
           .limit(limit.clamp(1, 100))
           .get();
@@ -86,7 +88,11 @@ class FirestoreService {
       final snap = await _db.collection(collection).limit(100).get();
       final rows = snap.docs
           .map((doc) => <String, dynamic>{'id': doc.id, ...doc.data()})
-          .where((row) => (row['status'] as String? ?? 'active') == status)
+          .where(
+            (row) =>
+                status == null ||
+                (row['status'] as String? ?? 'active') == status,
+          )
           .toList()
         ..sort(
           (a, b) => _createdAtMs(b['createdAt']).compareTo(

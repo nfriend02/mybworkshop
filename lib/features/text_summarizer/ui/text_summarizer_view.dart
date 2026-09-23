@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../shared/api/gemini_client.dart';
 import '../../../shared/utils/record_job.dart';
 import '../../../shared/widgets/feature_scaffold.dart';
+import '../../../shared/widgets/go_button.dart';
 import '../../../shared/widgets/nlp_request_bar.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../domain/extractive_summarizer.dart';
@@ -115,8 +116,11 @@ class _TextSummarizerViewState extends State<TextSummarizerView> {
           ),
           const SizedBox(height: 8),
           Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton(onPressed: _busy ? null : _run, child: Text(_busy ? 'Gemini 호출 중' : '실행')),
+            alignment: Alignment.centerRight,
+            child: GoButton(
+              busy: _busy,
+              onPressed: _busy ? null : _run,
+            ),
           ),
           if (_result != null) ...[
             const SizedBox(height: 12),

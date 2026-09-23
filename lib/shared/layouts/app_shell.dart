@@ -120,19 +120,73 @@ class _MobileNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [kHomeTool, ...kWorkshopTools, kUploadTool];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final rows = _twoRows(items, constraints.maxWidth - 24);
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
+          child: Column(
+            children: [
+              _chipLine(rows[0], 'mobile-nav-top'),
+              const SizedBox(height: 6),
+              _chipLine(rows[1], 'mobile-nav-bottom'),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _chipLine(List<WorkshopTool> tools, String bandKey) {
     return SizedBox(
-      height: 54,
-      child: ListView.separated(
+      height: 40,
+      child: SingleChildScrollView(
+        key: Key(bandKey),
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        itemCount: items.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          return _NavChip(tool: items[index], location: location);
-        },
+        child: Row(
+          children: [
+            for (var index = 0; index < tools.length; index++) ...[
+              if (index > 0) const SizedBox(width: 8),
+              _NavChip(
+                key: Key('mobile-nav-${tools[index].path}'),
+                tool: tools[index],
+                location: location,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
+}
+
+double _chipExtent(WorkshopTool tool) {
+  final painter = TextPainter(
+    text: TextSpan(
+      text: tool.label,
+      style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w800, fontSize: 12.5),
+    ),
+    textDirection: TextDirection.ltr,
+    maxLines: 1,
+  )..layout();
+  return painter.width + 58;
+}
+
+/// Fills the upper row with chips that fit, and keeps every remaining menu on the lower row.
+List<List<WorkshopTool>> _twoRows(List<WorkshopTool> items, double available) {
+  final width = available.isFinite && available > 0 ? available : 360.0;
+  var used = 0.0;
+  var split = items.length;
+  for (var index = 0; index < items.length; index++) {
+    final next = used + _chipExtent(items[index]);
+    if (next > width && index > 0) {
+      split = index;
+      break;
+    }
+    used = next;
+  }
+  if (split >= items.length) split = (items.length / 2).ceil();
+  return [items.sublist(0, split), items.sublist(split)];
 }
 
 class _NavTile extends StatelessWidget {
@@ -178,7 +232,7 @@ class _NavTile extends StatelessWidget {
 }
 
 class _NavChip extends StatelessWidget {
-  const _NavChip({required this.tool, required this.location});
+  const _NavChip({super.key, required this.tool, required this.location});
 
   final WorkshopTool tool;
   final String location;
@@ -193,7 +247,7 @@ class _NavChip extends StatelessWidget {
         onTap: () => context.go(tool.path),
         borderRadius: BorderRadius.circular(999),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
@@ -201,6 +255,7 @@ class _NavChip extends StatelessWidget {
             ),
           ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(tool.emoji, style: const TextStyle(fontSize: 14)),
               const SizedBox(width: 6),

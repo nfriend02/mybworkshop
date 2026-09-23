@@ -12,9 +12,11 @@ import '../../../shared/utils/pick_files.dart';
 import '../../../shared/utils/play_bytes.dart';
 import '../../../shared/utils/record_job.dart';
 import '../../../shared/widgets/feature_scaffold.dart';
+import '../../../shared/widgets/go_button.dart';
 import '../../../shared/widgets/nlp_request_bar.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/upload_drop_zone.dart';
+import '../../../shared/widgets/waiting_job_tile.dart';
 import '../domain/gemini_bridge.dart';
 import '../domain/wav_edit.dart';
 
@@ -59,7 +61,6 @@ class _AudioToolsViewState extends State<AudioToolsView> {
       if (action.speed != null) _speed = action.speed!.clamp(0.5, 2);
       if (action.gain != null) _gain = action.gain!.clamp(0, 2);
     });
-    await _apply();
   }
 
   Future<void> _apply() async {
@@ -111,15 +112,18 @@ class _AudioToolsViewState extends State<AudioToolsView> {
             onAnswer: _onNlp,
           ),
           const SizedBox(height: 12),
-          if (_file == null)
-            UploadDropZone(
-              title: '오디오를 놓아요',
-              subtitle: 'WAV를 올리면 파형과 편집이 열려요',
-              buttonLabel: 'Select File',
-              onPicked: _load,
-              accent: AppTheme.peach,
-            )
-          else ...[
+          UploadDropZone(
+            title: '오디오를 놓아요',
+            subtitle: 'WAV를 올린 뒤 GO를 누르면 적용해요',
+            buttonLabel: 'Select File',
+            onPicked: _load,
+            accent: AppTheme.peach,
+            sideAction: GoButton(
+              onPressed: _wav == null ? null : _apply,
+            ),
+          ),
+          if (_file != null) ...[
+            const SizedBox(height: 12),
             SectionCard(
               color: const Color(0xFFFFF4EE),
               child: Column(
@@ -131,6 +135,10 @@ class _AudioToolsViewState extends State<AudioToolsView> {
                 ],
               ),
             ),
+            if (_result == null) ...[
+              const SizedBox(height: 12),
+              WaitingJobTile(name: _file!.name, progress: 0),
+            ],
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
@@ -148,27 +156,23 @@ class _AudioToolsViewState extends State<AudioToolsView> {
               Slider(value: _speed, min: 0.5, max: 2, divisions: 6, label: '${_speed.toStringAsFixed(1)}x', onChanged: (value) => setState(() => _speed = value)),
             if (_tool == _AudioTool.volume)
               Slider(value: _gain, min: 0, max: 2, divisions: 8, label: _gain.toStringAsFixed(1), onChanged: (value) => setState(() => _gain = value)),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FilledButton(onPressed: _apply, child: const Text('적용')),
-            ),
             if (_note != null) ...[
               const SizedBox(height: 8),
               Text(_note!, style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w700)),
             ],
             if (_result != null) ...[
               const SizedBox(height: 12),
-              SectionCard(
-                color: AppTheme.peach,
-                child: Row(
+              WaitingJobTile(
+                name: '$_resultName · ${byteLabel(_result!.length)}',
+                progress: 1,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(child: Text('$_resultName · ${byteLabel(_result!.length)}', style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w800))),
                     IconButton(onPressed: () => playBytes(_result!, 'audio/wav'), icon: const Icon(Icons.play_arrow_rounded)),
-                    FilledButton.icon(
+                    IconButton(
+                      tooltip: '다운로드',
                       onPressed: () => downloadFile(context, bytes: _result!, filename: _resultName, mimeType: 'audio/wav'),
                       icon: const Icon(Icons.download_rounded),
-                      label: const Text('다운로드'),
                     ),
                   ],
                 ),

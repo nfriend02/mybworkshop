@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,10 +12,12 @@ import '../../../shared/utils/download_file.dart';
 import '../../../shared/utils/pick_files.dart';
 import '../../../shared/utils/record_job.dart';
 import '../../../shared/widgets/feature_scaffold.dart';
+import '../../../shared/widgets/go_button.dart';
 import '../../../shared/widgets/nlp_request_bar.dart';
 import '../../../shared/widgets/scroll_paged_list.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/upload_drop_zone.dart';
+import '../../../shared/widgets/waiting_job_tile.dart';
 import '../domain/gemini_bridge.dart';
 import '../domain/slide_parser.dart';
 
@@ -35,8 +38,12 @@ class MarkdownPresentationView extends StatefulWidget {
 
 class _MarkdownPresentationViewState extends State<MarkdownPresentationView> {
   final _preview = GlobalKey();
+  Uint8List? _fileBytes;
+  String? _fileName;
   List<Slide> _slides = const [];
   var _index = 0;
+  var _busy = false;
+  var _started = false;
   String _theme = '파스텔';
 
   Future<void> _onNlp(GeminiAnswer answer) async {
@@ -49,17 +56,33 @@ class _MarkdownPresentationViewState extends State<MarkdownPresentationView> {
 
   Future<void> _load(List<PickedBytes> files) async {
     final file = files.first;
-    final markdown = utf8.decode(file.bytes, allowMalformed: true);
+    setState(() {
+      _fileBytes = file.bytes;
+      _fileName = file.name;
+      _slides = const [];
+      _index = 0;
+      _started = false;
+    });
+  }
+
+  Future<void> _go() async {
+    final bytes = _fileBytes;
+    final name = _fileName;
+    if (bytes == null || name == null || _busy) return;
+    setState(() => _busy = true);
+    final markdown = utf8.decode(bytes, allowMalformed: true);
     final slides = parseMarkdownSlides(markdown);
+    if (!mounted) return;
     setState(() {
       _slides = slides;
       _index = 0;
+      _started = true;
+      _busy = false;
     });
-    if (!mounted) return;
     await recordJob(
       context,
       tool: 'markdown-presentation',
-      title: file.name,
+      title: name,
       detail: '${slides.length}장',
       extra: {'status': 'done'},
     );
@@ -79,7 +102,7 @@ class _MarkdownPresentationViewState extends State<MarkdownPresentationView> {
       subtitle: '문서를 올리면 테마에 맞춰 슬라이드가 됩니다',
       emoji: '📽️',
       accent: const Color(0xFFFFF0C9),
-      scrollable: false,
+      scrollable: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -90,15 +113,23 @@ class _MarkdownPresentationViewState extends State<MarkdownPresentationView> {
             onAnswer: _onNlp,
           ),
           const SizedBox(height: 8),
-          if (_slides.isEmpty)
-            UploadDropZone(
-              title: '마크다운을 놓아요',
-              subtitle: '# 제목으로 슬라이드가 나뉘어요',
-              buttonLabel: 'Select File',
-              onPicked: _load,
-              accent: const Color(0xFFFFF0C9),
-            )
-          else ...[
+          UploadDropZone(
+            title: '마크다운을 놓아요',
+            subtitle: '# 제목으로 슬라이드가 나뉘어요. GO를 누르면 만들어요',
+            buttonLabel: 'Select File',
+            onPicked: _load,
+            accent: const Color(0xFFFFF0C9),
+            sideAction: GoButton(
+              busy: _busy,
+              onPressed: _fileBytes == null ? null : _go,
+            ),
+          ),
+          if (_fileName != null && !_started) ...[
+            const SizedBox(height: 12),
+            WaitingJobTile(name: _fileName!, progress: 0),
+          ],
+          if (_started && slide != null) ...[
+            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               children: [
@@ -120,7 +151,7 @@ class _MarkdownPresentationViewState extends State<MarkdownPresentationView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(slide!.title, style: GoogleFonts.fredoka(fontSize: 32, fontWeight: FontWeight.w700, color: AppTheme.ink)),
+                      Text(slide.title, style: GoogleFonts.fredoka(fontSize: 32, fontWeight: FontWeight.w700, color: AppTheme.ink)),
                       const SizedBox(height: 8),
                       Expanded(
                         child: Text(slide.body, style: GoogleFonts.notoSansKr(fontSize: 16, fontWeight: FontWeight.w600, height: 1.4)),
@@ -140,7 +171,7 @@ class _MarkdownPresentationViewState extends State<MarkdownPresentationView> {
                   onPressed: _index >= _slides.length - 1 ? null : () => setState(() => _index += 1),
                   child: const Text('다음'),
                 ),
-                const SizedBox(width: 8),
+                const Spacer(),
                 FilledButton.icon(
                   onPressed: _download,
                   icon: const Icon(Icons.download_rounded),
@@ -149,7 +180,8 @@ class _MarkdownPresentationViewState extends State<MarkdownPresentationView> {
               ],
             ),
             const SizedBox(height: 8),
-            Expanded(
+            SizedBox(
+              height: 180,
               child: ScrollPagedList<Slide>(
                 items: _slides,
                 itemBuilder: (context, item, index) => ListTile(

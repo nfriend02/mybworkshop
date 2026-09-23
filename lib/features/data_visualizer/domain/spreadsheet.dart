@@ -7,7 +7,10 @@ import 'csv_series.dart';
 
 List<DataPoint> parseSpreadsheet(String name, Uint8List bytes) {
   final lower = name.toLowerCase();
-  if (lower.endsWith('.xlsx')) return _parseXlsx(bytes);
+  final zip = bytes.length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4B;
+  if (lower.endsWith('.xlsx') || (zip && !lower.endsWith('.csv') && !lower.endsWith('.txt'))) {
+    return _parseXlsx(bytes);
+  }
   return parseCsvSeries(utf8.decode(bytes, allowMalformed: true));
 }
 

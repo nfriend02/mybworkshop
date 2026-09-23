@@ -9,10 +9,12 @@ import '../../../shared/utils/download_file.dart';
 import '../../../shared/utils/pick_files.dart';
 import '../../../shared/utils/record_job.dart';
 import '../../../shared/widgets/feature_scaffold.dart';
+import '../../../shared/widgets/go_button.dart';
 import '../../../shared/widgets/nlp_request_bar.dart';
 import '../../../shared/widgets/scroll_paged_list.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/upload_drop_zone.dart';
+import '../../../shared/widgets/waiting_job_tile.dart';
 import '../domain/csv_series.dart';
 import '../domain/gemini_bridge.dart';
 import '../domain/spreadsheet.dart';
@@ -27,8 +29,11 @@ class DataVisualizerView extends StatefulWidget {
 
 class _DataVisualizerViewState extends State<DataVisualizerView> {
   final _chartKey = GlobalKey();
+  PickedBytes? _file;
   List<DataPoint> _points = const [];
   ChartKind _kind = ChartKind.bar;
+  var _busy = false;
+  var _started = false;
   String? _error;
 
   Future<void> _onNlp(GeminiAnswer answer) async {
@@ -38,14 +43,26 @@ class _DataVisualizerViewState extends State<DataVisualizerView> {
   }
 
   Future<void> _load(List<PickedBytes> files) async {
-    final file = files.first;
+    setState(() {
+      _file = files.first;
+      _points = const [];
+      _started = false;
+      _error = null;
+    });
+  }
+
+  Future<void> _go() async {
+    final file = _file;
+    if (file == null || _busy) return;
+    setState(() {
+      _busy = true;
+      _started = true;
+      _error = null;
+    });
     try {
       final points = parseSpreadsheet(file.name, file.bytes);
-      setState(() {
-        _points = points;
-        _error = null;
-      });
       if (!mounted) return;
+      setState(() => _points = points);
       await recordJob(
         context,
         tool: 'data-visualizer',
@@ -54,7 +71,9 @@ class _DataVisualizerViewState extends State<DataVisualizerView> {
         extra: {'status': 'done'},
       );
     } catch (error) {
-      setState(() => _error = '$error');
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -72,7 +91,7 @@ class _DataVisualizerViewState extends State<DataVisualizerView> {
       subtitle: 'CSV나 Excel을 올리고 차트 모양을 골라요',
       emoji: '📊',
       accent: const Color(0xFFD9F6FF),
-      scrollable: false,
+      scrollable: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -83,15 +102,23 @@ class _DataVisualizerViewState extends State<DataVisualizerView> {
             onAnswer: _onNlp,
           ),
           const SizedBox(height: 8),
-          if (_points.isEmpty)
-            UploadDropZone(
-              title: 'CSV 또는 Excel을 놓아요',
-              subtitle: 'A열은 이름, B열은 숫자예요',
-              buttonLabel: 'Select File',
-              onPicked: _load,
-              accent: AppTheme.sky,
-            )
-          else ...[
+          UploadDropZone(
+            title: 'CSV 또는 Excel을 놓아요',
+            subtitle: 'A열은 이름, B열은 숫자예요. GO를 누르면 차트가 나와요',
+            buttonLabel: 'Select File',
+            onPicked: _load,
+            accent: AppTheme.sky,
+            sideAction: GoButton(
+              busy: _busy,
+              onPressed: _file == null ? null : _go,
+            ),
+          ),
+          if (_file != null && !_started) ...[
+            const SizedBox(height: 12),
+            WaitingJobTile(name: _file!.name, progress: 0),
+          ],
+          if (_started && _points.isNotEmpty) ...[
+            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               children: [
@@ -118,16 +145,18 @@ class _DataVisualizerViewState extends State<DataVisualizerView> {
               ),
             ),
             const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FilledButton.icon(
+            WaitingJobTile(
+              name: '${_file?.name ?? '차트'} · ${_kind.name}',
+              progress: 1,
+              trailing: IconButton(
+                tooltip: '다운로드',
                 onPressed: _download,
                 icon: const Icon(Icons.download_rounded),
-                label: const Text('다운로드'),
               ),
             ),
             const SizedBox(height: 8),
-            Expanded(
+            SizedBox(
+              height: 180,
               child: ScrollPagedList<DataPoint>(
                 items: _points,
                 itemBuilder: (context, point, index) => ListTile(

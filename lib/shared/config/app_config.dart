@@ -41,7 +41,7 @@ class AppConfig {
   static String? get googleMapsApiKey =>
       _secret('YOUR_GOOGLE_MAPS_API_KEY') ?? _secret('GOOGLE_MAPS_API_KEY');
 
-  static String get geminiModel => _env('GEMINI_MODEL', 'gemini-2.0-flash');
+  static String get geminiModel => _env('GEMINI_MODEL', 'gemini-3.6-flash');
 
   static bool get hasGeminiKey => geminiApiKey != null;
 

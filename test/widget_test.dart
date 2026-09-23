@@ -60,7 +60,25 @@ void main() {
     await tester.pump();
     expect(find.text('My AI Workshop'), findsWidgets);
     expect(find.text('나의 AI 워크샵'), findsWidgets);
-    expect(find.text('GIF 편집'), findsWidgets);
+    expect(find.text('GIF 편집기'), findsWidgets);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets('gif editor page shows the upload box', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1100, 900);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(const MyBWorkshopApp(firebaseReady: false));
+    await tester.pump();
+    await tester.tap(find.text('GIF 편집기').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('GIF Editor'), findsOneWidget);
+    expect(find.text('Select File'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   });
@@ -80,7 +98,17 @@ void main() {
     await tester.pumpWidget(const MyBWorkshopApp(firebaseReady: false));
     await tester.pump();
     expect(find.byKey(const Key('mobile-nav')), findsOneWidget);
+    expect(find.byKey(const Key('mobile-nav-top')), findsOneWidget);
+    expect(find.byKey(const Key('mobile-nav-bottom')), findsOneWidget);
     expect(find.byKey(const Key('desktop-sidebar')), findsNothing);
+    final home = tester.getTopLeft(find.byKey(const Key('mobile-nav-/')));
+    final upload = tester.getTopLeft(find.byKey(const Key('mobile-nav-/upload')));
+    expect(upload.dy, greaterThan(home.dy));
+    final documents = tester.getTopLeft(find.byKey(const Key('mobile-nav-/documents')));
+    final qr = tester.getTopLeft(find.byKey(const Key('mobile-nav-/qr')));
+    expect((documents.dy - qr.dy).abs(), lessThan(4));
+    expect(qr.dx, greaterThan(documents.dx));
+    expect(tester.getSize(find.byKey(const Key('mobile-nav-bottom'))).height, 40);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   });

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 
+import '../../../shared/utils/image_sniff.dart';
 import 'zip_compressor.dart';
 
 class HwpBlocked implements Exception {
@@ -36,8 +37,15 @@ String compName(String name, String extension) {
 
 CompressedFile compressDocument({required String name, required Uint8List bytes}) {
   if (isHwpName(name)) throw const HwpBlocked();
+  final kind = imageKindOf(bytes, name: name);
+  if (kind == ImageKind.heic) {
+    throw const FormatException(heicUploadMessage);
+  }
+  if (kind != ImageKind.unknown) {
+    return _compressRaster(ensureImageName(name, kind), bytes);
+  }
   final lower = name.toLowerCase();
-  if (lower.endsWith('.pdf')) return _compressPdf(name, bytes);
+  if (lower.endsWith('.pdf') || looksLikePdf(bytes)) return _compressPdf(name, bytes);
   if (_isRaster(lower)) return _compressRaster(name, bytes);
   return CompressedFile(
     name: compName(name, 'zip'),

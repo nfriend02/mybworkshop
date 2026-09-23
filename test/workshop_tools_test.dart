@@ -12,9 +12,12 @@ import 'package:mybworkshop/features/gif_generator/domain/fps_limit.dart';
 import 'package:mybworkshop/features/gif_generator/domain/gif_builder.dart';
 import 'package:mybworkshop/features/image_resizer/domain/aspect_fit.dart';
 import 'package:mybworkshop/features/markdown_presentation/domain/slide_parser.dart';
+import 'package:mybworkshop/features/meme_generator/domain/meme_captions.dart';
 import 'package:mybworkshop/features/qr_generator/domain/qr_payload.dart';
 import 'package:mybworkshop/features/text_summarizer/domain/extractive_summarizer.dart';
+import 'package:mybworkshop/shared/api/local_action.dart';
 import 'package:mybworkshop/shared/api/nlp_action.dart';
+import 'package:mybworkshop/shared/utils/image_sniff.dart';
 
 void main() {
   test('summarizer keeps the highest scoring sentences', () {
@@ -63,6 +66,19 @@ void main() {
     expect(String.fromCharCodes(gif.sublist(0, 3)), 'GIF');
   });
 
+  test('crop to a square keeps both sides equal', () {
+    final gif = buildCaptionGif(
+      text: 'Hi',
+      red: 255,
+      green: 220,
+      blue: 230,
+      frameCount: 2,
+      delayMs: 100,
+    );
+    final cropped = GifClip.decode(gif, 'hi.gif').cropAspect(1, cover: false);
+    expect(cropped.width, cropped.height);
+  });
+
   test('gif resize keeps the GIF signature', () {
     final gif = buildCaptionGif(
       text: 'Hi',
@@ -74,6 +90,26 @@ void main() {
     );
     final resized = GifClip.decode(gif, 'hi.gif').resized(40, 24).encode();
     expect(String.fromCharCodes(resized.sublist(0, 3)), 'GIF');
+  });
+
+  test('edited gif preview is a png of the resized frame', () {
+    final gif = buildCaptionGif(
+      text: 'Hi',
+      red: 255,
+      green: 220,
+      blue: 230,
+      frameCount: 1,
+      delayMs: 100,
+    );
+    final png = GifClip.decode(gif, 'hi.gif').previewPng(
+      (frame) => img.copyResize(frame, width: 30, height: 10),
+    );
+    expect(png[0], 0x89);
+    expect(png[1], 0x50);
+    final decoded = img.decodePng(png);
+    expect(decoded, isNotNull);
+    expect(decoded!.width, 30);
+    expect(decoded.height, 10);
   });
 
   test('aspect crop makes a square', () {
@@ -112,10 +148,34 @@ void main() {
     expect(buildQrPayload(QrKind.email, {'text': 'a@b.c', 'email': 'a@b.c'}), contains('mailto:a@b.c'));
   });
 
+  test('meme captions land on the top and bottom lines', () {
+    const reply = '''
+* **상단 자막:** "예전엔 큰맘 먹으면 살 수 있었잖아..."
+* **하단 자막:** "이제는 정기 할부로도 모시기 힘든 너"
+''';
+    final captions = parseMemeCaptions(reply);
+    expect(captions.top, '예전엔 큰맘 먹으면 살 수 있었잖아...');
+    expect(captions.bottom, '이제는 정기 할부로도 모시기 힘든 너');
+  });
+
+  test('a spoken ratio becomes a resize action', () {
+    final action = NlpAction.tryParse(localResize('3:6으로 수정해 줘')!);
+    expect(action!.ratio, '3:6');
+    expect(action.mode, 'padding');
+    expect(action.note, contains('GO'));
+  });
+
   test('nlp action reads a resize request', () {
     final action = NlpAction.tryParse('{"tool":"resize","width":10,"height":20,"note":"ok"}');
     expect(action!.tool, 'resize');
     expect(action.width, 10);
+  });
+
+  test('a jpeg without an extension is still an image', () {
+    final bytes = Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xD9]);
+    expect(imageKindOf(bytes, name: 'photo'), ImageKind.jpg);
+    expect(ensureImageName('photo', ImageKind.jpg), 'photo.jpg');
+    expect(isZipPayload(bytes, 'photo'), isFalse);
   });
 
   test('wav volume stays a RIFF file', () {

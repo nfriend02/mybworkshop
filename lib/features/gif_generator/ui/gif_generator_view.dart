@@ -8,13 +8,14 @@ import '../../../shared/api/gemini_client.dart';
 import '../../../shared/api/nlp_action.dart';
 import '../../../shared/utils/byte_label.dart';
 import '../../../shared/utils/download_file.dart';
+import '../../../shared/utils/image_sniff.dart';
 import '../../../shared/utils/pick_files.dart';
 import '../../../shared/utils/record_job.dart';
 import '../../../shared/widgets/feature_scaffold.dart';
+import '../../../shared/widgets/go_button.dart';
 import '../../../shared/widgets/nlp_request_bar.dart';
-import '../../../shared/widgets/scroll_paged_list.dart';
-import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/upload_drop_zone.dart';
+import '../../../shared/widgets/waiting_job_tile.dart';
 import '../../gif_editor/domain/gif_composer.dart';
 import '../domain/fps_limit.dart';
 import '../domain/gemini_bridge.dart';
@@ -45,23 +46,46 @@ class _GifGeneratorViewState extends State<GifGeneratorView> {
     final action = NlpAction.tryParse(answer.text);
     if (action?.fps == null) return;
     setState(() => _fps = clampGifFps(action!.fps!).toDouble());
-    if (_frames.isNotEmpty) await _build();
   }
 
   Future<void> _load(List<PickedBytes> files) async {
+    final frames = <_Frame>[];
+    var skippedHeic = false;
+    for (final file in files) {
+      final kind = imageKindOf(file.bytes, name: file.name, mimeType: file.mimeType);
+      if (kind == ImageKind.heic) {
+        skippedHeic = true;
+        continue;
+      }
+      if (kind == ImageKind.unknown) continue;
+      frames.add(_Frame(name: ensureImageName(file.name, kind), bytes: file.bytes));
+    }
+    if (frames.isEmpty) {
+      setState(() {
+        _frames.clear();
+        _gif = null;
+        _error = skippedHeic ? heicUploadMessage : '이미지를 찾지 못했어요. PNG, JPG, GIF, WEBP를 올려 주세요';
+      });
+      return;
+    }
     setState(() {
       _frames
         ..clear()
-        ..addAll(files.map((file) => _Frame(name: file.name, bytes: file.bytes)));
+        ..addAll(frames);
       _gif = null;
-      _error = null;
+      _error = skippedHeic ? heicUploadMessage : null;
     });
-    await _build();
   }
 
   Future<void> _build() async {
     if (_frames.isEmpty || _busy) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _gif = null;
+      for (final frame in _frames) {
+        frame.progress = 0;
+      }
+    });
     try {
       for (final frame in _frames) {
         frame.progress = 0.4;
@@ -95,34 +119,16 @@ class _GifGeneratorViewState extends State<GifGeneratorView> {
       subtitle: '사진을 이어 붙이고, 속도는 29FPS를 넘지 않아요',
       emoji: '✨',
       accent: AppTheme.butter,
-      scrollable: _frames.isEmpty,
-      child: _frames.isEmpty
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+      scrollable: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: ListView(
               children: [
                 NlpRequestBar(
                   tool: 'gif-generator',
                   hint: '예: 12FPS로 만들어 줘',
-                  ask: askGifGenerator,
-                  onAnswer: _onNlp,
-                ),
-                const SizedBox(height: 12),
-                UploadDropZone(
-                  title: '사진들을 놓아요',
-                  subtitle: '여러 장을 올리면 순서대로 GIF가 됩니다',
-                  buttonLabel: '업로드',
-                  multiple: true,
-                  onPicked: _load,
-                  accent: AppTheme.butter,
-                ),
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                NlpRequestBar(
-                  tool: 'gif-generator',
-                  hint: '예: 8FPS로 천천히',
                   ask: askGifGenerator,
                   onAnswer: _onNlp,
                 ),
@@ -135,59 +141,52 @@ class _GifGeneratorViewState extends State<GifGeneratorView> {
                   divisions: 28,
                   label: '$fps',
                   onChanged: _busy ? null : (value) => setState(() => _fps = value),
-                  onChangeEnd: (_) => _build(),
                 ),
-                Expanded(
-                  child: ScrollPagedList<_Frame>(
-                    items: _frames,
-                    itemBuilder: (context, frame, index) => SectionCard(
-                      padding: const EdgeInsets.all(10),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: Image.memory(frame.bytes, width: 64, height: 64, fit: BoxFit.cover),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(frame.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                const SizedBox(height: 6),
-                                LinearProgressIndicator(value: frame.progress == 0 ? null : frame.progress),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: '이 프레임 저장',
-                            onPressed: () => downloadFile(context, bytes: frame.bytes, filename: frame.name, mimeType: 'image/png'),
-                            icon: const Icon(Icons.download_rounded),
-                          ),
-                        ],
-                      ),
-                    ),
+                UploadDropZone(
+                  title: '사진들을 놓아요',
+                  subtitle: '올린 뒤 GO를 누르면 GIF가 됩니다',
+                  buttonLabel: '업로드',
+                  multiple: true,
+                  onPicked: _load,
+                  accent: AppTheme.butter,
+                  sideAction: GoButton(
+                    busy: _busy,
+                    onPressed: _frames.isEmpty ? null : _build,
                   ),
                 ),
-                if (_error != null) Text(_error!, style: GoogleFonts.notoSansKr(color: AppTheme.coral, fontWeight: FontWeight.w700)),
-                if (_gif != null)
-                  SectionCard(
-                    color: AppTheme.butter,
-                    child: Row(
-                      children: [
-                        Image.memory(_gif!, height: 72, fit: BoxFit.contain),
-                        const SizedBox(width: 12),
-                        Expanded(child: Text('완성 GIF · ${byteLabel(_gif!.length)}', style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w800))),
-                        FilledButton.icon(
-                          onPressed: () => downloadFile(context, bytes: _gif!, filename: 'workshop.gif', mimeType: 'image/gif'),
-                          icon: const Icon(Icons.download_rounded),
-                          label: const Text('다운로드'),
-                        ),
-                      ],
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(_error!, style: GoogleFonts.notoSansKr(color: AppTheme.coral, fontWeight: FontWeight.w700)),
+                ],
+                if (_gif == null && _frames.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  for (final frame in _frames) ...[
+                    WaitingJobTile(
+                      name: frame.name,
+                      preview: frame.bytes,
+                      progress: _busy && frame.progress == 0 ? null : frame.progress,
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                  ],
+                ],
               ],
             ),
+          ),
+          if (_gif != null) ...[
+            const SizedBox(height: 8),
+            WaitingJobTile(
+              name: '완성 GIF · ${byteLabel(_gif!.length)}',
+              preview: _gif,
+              progress: 1,
+              trailing: IconButton(
+                tooltip: '다운로드',
+                onPressed: () => downloadFile(context, bytes: _gif!, filename: 'workshop.gif', mimeType: 'image/gif'),
+                icon: const Icon(Icons.download_rounded),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

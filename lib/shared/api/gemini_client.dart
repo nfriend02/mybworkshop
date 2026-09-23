@@ -42,14 +42,21 @@ class GeminiClient {
       return const GeminiAnswer(text: '요청 문장을 먼저 입력해 주세요.');
     }
 
-    final models = <String>{
-      if (wantImage) 'gemini-2.5-flash-image',
-      if (wantImage) 'gemini-2.0-flash-preview-image-generation',
-      AppConfig.geminiModel,
-      'gemini-flash-latest',
-      'gemini-2.0-flash',
-      'gemini-2.5-flash',
-    };
+    final models = <String>[];
+    void addModel(String name) {
+      final modelName = name.trim();
+      if (modelName.isEmpty || models.contains(modelName)) return;
+      models.add(modelName);
+    }
+
+    if (wantImage) {
+      addModel('gemini-3.1-flash-image');
+      addModel('gemini-3-pro-image');
+    }
+    addModel('gemini-3.5-flash');
+    addModel('gemini-3.6-flash');
+    addModel('gemini-3.5-flash-lite');
+    addModel(AppConfig.geminiModel);
 
     final parts = <Map<String, dynamic>>[
       {'text': '$instruction\n\n사용자 요청:\n$trimmed'},
@@ -64,48 +71,64 @@ class GeminiClient {
     }
 
     Object? lastError;
-    for (final model in models) {
-      try {
-        final uri = Uri.parse(
-          'https://generativelanguage.googleapis.com/v1beta/models/'
-          '$model:generateContent?key=$key',
-        );
-        final generation = <String, dynamic>{'temperature': wantImage ? 0.8 : 0.4};
-        if (json && !wantImage) {
-          generation['responseMimeType'] = 'application/json';
-        }
-        if (wantImage) {
-          generation['responseModalities'] = ['TEXT', 'IMAGE'];
-        }
+    for (var index = 0; index < models.length; index++) {
+      final model = models[index];
+      for (var attempt = 0; attempt < 3; attempt++) {
+        try {
+          final uri = Uri.parse(
+            'https://generativelanguage.googleapis.com/v1beta/models/'
+            '$model:generateContent',
+          );
+          final generation = <String, dynamic>{'temperature': wantImage ? 0.8 : 0.4};
+          if (json && !wantImage) {
+            generation['responseMimeType'] = 'application/json';
+          }
+          if (wantImage) {
+            generation['responseModalities'] = ['TEXT', 'IMAGE'];
+          }
 
-        final res = await _client
-            .post(
-              uri,
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'contents': [
-                  {'role': 'user', 'parts': parts},
-                ],
-                'generationConfig': generation,
-              }),
-            )
-            .timeout(const Duration(seconds: 60));
+          final res = await _client
+              .post(
+                uri,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-goog-api-key': key,
+                },
+                body: jsonEncode({
+                  'contents': [
+                    {'role': 'user', 'parts': parts},
+                  ],
+                  'generationConfig': generation,
+                }),
+              )
+              .timeout(const Duration(seconds: 60));
 
-        if (res.statusCode == 404) continue;
-        if (res.statusCode >= 400) {
+          if (res.statusCode == 200) {
+            final body = jsonDecode(res.body);
+            if (body is! Map<String, dynamic>) break;
+            final parsed = _readParts(body);
+            if (parsed.text.trim().isEmpty && parsed.imageBytes == null) break;
+            return parsed;
+          }
+
+          final suggested = _suggestedModel(res.body);
+          if (suggested != null) addModel(suggested);
+          if (res.statusCode == 503 || res.statusCode == 429) {
+            lastError = 'Gemini가 잠시 바빠요. 다시 요청해 주세요.';
+            if (attempt < 2) {
+              await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+              continue;
+            }
+            break;
+          }
           debugPrint('Gemini $model HTTP ${res.statusCode}');
           lastError = 'Gemini 응답 ${res.statusCode}';
-          continue;
+          break;
+        } catch (error) {
+          debugPrint('Gemini $model failed');
+          lastError = error;
+          break;
         }
-
-        final body = jsonDecode(res.body);
-        if (body is! Map<String, dynamic>) continue;
-        final parsed = _readParts(body);
-        if (parsed.text.trim().isEmpty && parsed.imageBytes == null) continue;
-        return parsed;
-      } catch (error) {
-        debugPrint('Gemini $model failed');
-        lastError = error;
       }
     }
 
@@ -113,6 +136,11 @@ class GeminiClient {
       text: 'Gemini 호출에 실패했어요. ${lastError ?? '잠시 뒤 다시 시도해 주세요.'}',
       usedFallback: true,
     );
+  }
+
+  String? _suggestedModel(String body) {
+    final match = RegExp(r'models/([A-Za-z0-9._-]+)').firstMatch(body);
+    return match?.group(1);
   }
 
   GeminiAnswer _readParts(Map<String, dynamic> body) {

@@ -40,12 +40,12 @@ const WorkshopTool kUploadTool = WorkshopTool(
 
 const List<WorkshopTool> kWorkshopTools = [
   WorkshopTool(
-    label: 'GIF 편집',
+    label: 'GIF 편집기',
     emoji: '🎬',
     icon: Icons.movie_filter_rounded,
     path: '/gif-editor',
     color: Color(0xFFFFC2D4),
-    blurb: '크기, 자르기, 회전, 속도까지 패널로 편집해요',
+    blurb: '원본 GIF와 오른쪽 도구로 크기, 자르기, 속도를 편집해요',
   ),
   WorkshopTool(
     label: '이미지 리사이즈',

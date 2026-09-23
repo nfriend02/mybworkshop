@@ -1,7 +1,8 @@
 import '../../../shared/api/gemini_client.dart';
+import '../../../shared/api/local_action.dart';
 
-Future<GeminiAnswer> askAudioTools(String request) {
-  return GeminiClient().ask(
+Future<GeminiAnswer> askAudioTools(String request) async {
+  final remote = await GeminiClient().ask(
     request: request,
     json: true,
     instruction:
@@ -9,4 +10,5 @@ Future<GeminiAnswer> askAudioTools(String request) {
         'speed는 0.5~2, gain은 0~2입니다. JSON만 반환하세요. '
         '예: {"tool":"volume","gain":0.6,"speed":1,"note":"볼륨을 낮출게요"}',
   );
+  return preferParsed(remote, localAudio(request));
 }
