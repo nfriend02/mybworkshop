@@ -31,6 +31,26 @@ class AppConfig {
   static String get netlifySiteUrl =>
       _env('NETLIFY_SITE_URL', defaultNetlifyUrl);
 
+  static String? get openWeatherApiKey => _secret('OPENWEATHER_API_KEY');
+
+  static String? get exchangeRateApiKey => _secret('EXCHANGE_RATE_API_KEY');
+
+  static String? get geminiApiKey => _secret('GEMINI_API_KEY');
+
+  /// `.env.example` uses `YOUR_GOOGLE_MAPS_API_KEY`. `GOOGLE_MAPS_API_KEY` also works.
+  static String? get googleMapsApiKey =>
+      _secret('YOUR_GOOGLE_MAPS_API_KEY') ?? _secret('GOOGLE_MAPS_API_KEY');
+
+  static String get geminiModel => _env('GEMINI_MODEL', 'gemini-2.0-flash');
+
+  static bool get hasGeminiKey => geminiApiKey != null;
+
+  static bool get hasOpenWeatherKey => openWeatherApiKey != null;
+
+  static bool get hasExchangeRateKey => exchangeRateApiKey != null;
+
+  static bool get hasGoogleMapsKey => googleMapsApiKey != null;
+
   /// Portfolio upload checklist (description is always ≤ 200 chars).
   static Map<String, String> uploadChecklistMeta() {
     return {
@@ -45,8 +65,22 @@ class AppConfig {
 
   static String _env(String key, String fallback) {
     if (!dotenv.isInitialized) return fallback;
-    final value = dotenv.env[key]?.trim();
+    final value = _clean(dotenv.env[key]);
     if (value == null || value.isEmpty) return fallback;
     return value;
+  }
+
+  static String? _secret(String key) {
+    if (!dotenv.isInitialized) return null;
+    final value = _clean(dotenv.env[key]);
+    if (value == null || value.isEmpty || value.startsWith('your_')) {
+      return null;
+    }
+    return value;
+  }
+
+  static String? _clean(String? raw) {
+    if (raw == null) return null;
+    return raw.trim().replaceAll(RegExp(r'''^['"]|['"]$'''), '');
   }
 }

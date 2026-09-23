@@ -28,6 +28,11 @@ APP_AUTHOR=${APP_AUTHOR:-MyBranch Team}
 APP_ICON_URL=${APP_ICON_URL:-/icons/Icon-512.png}
 GITHUB_BRANCH_URL=${GITHUB_BRANCH_URL:-https://github.com/nfriend02/mybworkshop}
 NETLIFY_SITE_URL=${URL:-${NETLIFY_SITE_URL:-https://mybaiworkshop.netlify.app}}
+GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY:-}
+EXCHANGE_RATE_API_KEY=${EXCHANGE_RATE_API_KEY:-}
+GEMINI_API_KEY=${GEMINI_API_KEY:-}
+YOUR_GOOGLE_MAPS_API_KEY=${YOUR_GOOGLE_MAPS_API_KEY:-}
 EOF
 cp assets/config/app.env assets/config/app_config.env
 cp assets/config/app.env .env

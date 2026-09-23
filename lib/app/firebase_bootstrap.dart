@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../firebase_options.dart';
@@ -10,18 +11,28 @@ import '../services/auth_service.dart';
 /// Returns whether Firestore/Auth can be used. Missing keys fall back to the
 /// built-in mybworkshop options; a hard failure switches the UI to demo mode.
 Future<bool> bootstrapFirebase() async {
+  final merged = <String, String>{};
   for (final path in const [
     'assets/config/app.env',
     'assets/config/app_config.env',
-    '.env',
   ]) {
     try {
-      await dotenv.load(fileName: path, isOptional: true);
-      if (dotenv.isInitialized && dotenv.env.isNotEmpty) break;
+      final raw = await rootBundle.loadString(path);
+      for (final line in raw.split(RegExp(r'\r?\n'))) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+        final index = trimmed.indexOf('=');
+        if (index <= 0) continue;
+        final key = trimmed.substring(0, index).trim();
+        final value = trimmed.substring(index + 1).trim();
+        if (value.isEmpty && merged.containsKey(key)) continue;
+        merged[key] = value;
+      }
     } catch (e, st) {
       debugPrint('dotenv load ($path) skipped: $e\n$st');
     }
   }
+  dotenv.testLoad(mergeWith: merged);
 
   try {
     final options = DefaultFirebaseOptions.currentPlatform;

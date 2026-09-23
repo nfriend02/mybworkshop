@@ -45,7 +45,7 @@ const List<WorkshopTool> kWorkshopTools = [
     icon: Icons.movie_filter_rounded,
     path: '/gif-editor',
     color: Color(0xFFFFC2D4),
-    blurb: '프레임을 이어 붙이고 속도를 조절해요',
+    blurb: '크기, 자르기, 회전, 속도까지 패널로 편집해요',
   ),
   WorkshopTool(
     label: '이미지 리사이즈',
@@ -53,7 +53,7 @@ const List<WorkshopTool> kWorkshopTools = [
     icon: Icons.photo_size_select_large_rounded,
     path: '/image-resizer',
     color: Color(0xFFC8F2E0),
-    blurb: '원하는 너비로 이미지를 줄여요',
+    blurb: '비율에 맞추고 ZIP은 한 장씩 풀어요',
   ),
   WorkshopTool(
     label: 'GIF 생성',
@@ -61,7 +61,7 @@ const List<WorkshopTool> kWorkshopTools = [
     icon: Icons.auto_awesome_rounded,
     path: '/gif-generator',
     color: Color(0xFFFFF1B8),
-    blurb: '글자와 색으로 짧은 GIF를 만들어요',
+    blurb: '사진을 이어 최대 29FPS GIF로 만들어요',
   ),
   WorkshopTool(
     label: '문서 압축',
@@ -69,7 +69,7 @@ const List<WorkshopTool> kWorkshopTools = [
     icon: Icons.folder_zip_rounded,
     path: '/documents',
     color: Color(0xFFD4EFFF),
-    blurb: '여러 파일을 ZIP으로 묶어요',
+    blurb: '이미지를 낮추고 PDF는 저화질로 다시 묶어요',
   ),
   WorkshopTool(
     label: 'QR 생성',
@@ -77,7 +77,7 @@ const List<WorkshopTool> kWorkshopTools = [
     icon: Icons.qr_code_2_rounded,
     path: '/qr',
     color: Color(0xFFE4D7FF),
-    blurb: '문장을 바로 스캔되는 QR로',
+    blurb: '텍스트부터 명함, 일정까지 QR로',
   ),
   WorkshopTool(
     label: '오디오 도구',
@@ -85,15 +85,15 @@ const List<WorkshopTool> kWorkshopTools = [
     icon: Icons.graphic_eq_rounded,
     path: '/audio',
     color: Color(0xFFFFD3C4),
-    blurb: '톤을 만들고 템포를 재요',
+    blurb: '파형을 보며 속도, 볼륨, 노이즈를 다뤄요',
   ),
   WorkshopTool(
-    label: '텍스트 요약',
+    label: '요약/번역',
     emoji: '📝',
     icon: Icons.notes_rounded,
     path: '/summarize',
     color: Color(0xFFCDECCF),
-    blurb: '긴 글을 핵심 문장으로 줄여요',
+    blurb: 'Gemini로 요약하고 다른 언어로 옮겨요',
   ),
   WorkshopTool(
     label: '밈 생성',
@@ -101,7 +101,7 @@ const List<WorkshopTool> kWorkshopTools = [
     icon: Icons.sentiment_very_satisfied_rounded,
     path: '/meme',
     color: Color(0xFFFFE0F0),
-    blurb: '위아래 자막이 있는 밈을 그려요',
+    blurb: '사진과 문구로 밈을 만들고 받아요',
   ),
   WorkshopTool(
     label: '데이터 시각화',
@@ -109,7 +109,7 @@ const List<WorkshopTool> kWorkshopTools = [
     icon: Icons.bar_chart_rounded,
     path: '/visualize',
     color: Color(0xFFD9F6FF),
-    blurb: 'CSV를 파스텔 막대 차트로',
+    blurb: 'CSV와 Excel을 막대, 선, 파이, 히트맵으로',
   ),
   WorkshopTool(
     label: 'AI 아바타',
@@ -117,7 +117,7 @@ const List<WorkshopTool> kWorkshopTools = [
     icon: Icons.face_retouching_natural_rounded,
     path: '/avatar',
     color: Color(0xFFF3D6FF),
-    blurb: '이름에서 고유한 얼굴을 만들어요',
+    blurb: '사진과 스타일로 아바타를 만들어요',
   ),
   WorkshopTool(
     label: '마크다운 발표',
@@ -125,7 +125,7 @@ const List<WorkshopTool> kWorkshopTools = [
     icon: Icons.slideshow_rounded,
     path: '/slides',
     color: Color(0xFFFFF0C9),
-    blurb: '마크다운 제목을 슬라이드로',
+    blurb: '마크다운을 테마 슬라이드로 넘겨요',
   ),
 ];
 

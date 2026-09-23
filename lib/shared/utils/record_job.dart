@@ -8,13 +8,17 @@ Future<void> recordJob(
   required String tool,
   required String title,
   String detail = '',
+  Map<String, Object?> extra = const {},
+  bool notify = true,
 }) async {
   final firestore = context.read<FirestoreService?>();
   final messenger = ScaffoldMessenger.of(context);
   if (firestore == null) {
-    messenger.showSnackBar(
-      const SnackBar(content: Text('데모 모드라 이 작업은 화면에만 남아요')),
-    );
+    if (notify) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('데모 모드라 이 작업은 화면에만 남아요')),
+      );
+    }
     return;
   }
   try {
@@ -22,10 +26,13 @@ Future<void> recordJob(
       'tool': tool,
       'title': title,
       'detail': detail,
+      ...extra,
     });
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Firestore에 작업을 기록했어요')),
-    );
+    if (notify) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Firestore에 작업을 기록했어요')),
+      );
+    }
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('기록 실패: $e')));
   }
