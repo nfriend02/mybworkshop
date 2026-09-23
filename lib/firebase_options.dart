@@ -7,12 +7,13 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 /// overrides these values when it is present and complete.
 class DefaultFirebaseOptions {
   static const FirebaseOptions mybworkshop = FirebaseOptions(
-    apiKey: 'AIzaSyCFxQOwdbozBzoywh2vlxX0f1j6Gg7bIVQ',
-    appId: '1:631186762504:web:954ac57f9c4085217a9abd',
-    messagingSenderId: '631186762504',
-    projectId: 'mybworkshop',
-    authDomain: 'mybworkshop.firebaseapp.com',
-    storageBucket: 'mybworkshop.firebasestorage.app',
+    apiKey: 'AIzaSyD8b86X6pY9ktgw4XsJw5kCA58VNcF7tww',
+    appId: '1:941034192072:web:539a2a4407d960eb6639fd',
+    messagingSenderId: '941034192072',
+    projectId: 'mybworkshop-d2b6d',
+    authDomain: 'mybworkshop-d2b6d.firebaseapp.com',
+    storageBucket: 'mybworkshop-d2b6d.firebasestorage.app',
+    measurementId: 'G-3RDR3ZLH1C',
   );
 
   static FirebaseOptions get currentPlatform {

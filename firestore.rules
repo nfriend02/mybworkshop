@@ -5,11 +5,13 @@ service cloud.firestore {
       return request.resource.data.keys().hasAll(['status'])
         && request.resource.data.status is string;
     }
+
     match /jobs/{docId} {
       allow read: if true;
       allow create, update: if hasStatus();
       allow delete: if true;
     }
+
     match /uploads/{docId} {
       allow read: if true;
       allow create, update: if hasStatus();

@@ -16,7 +16,7 @@ class QrGeneratorPage extends StatefulWidget {
 }
 
 class _QrGeneratorPageState extends State<QrGeneratorPage> {
-  final _text = TextEditingController(text: 'https://mybworkshop.netlify.app');
+  final _text = TextEditingController(text: 'https://mybaiworkshop.netlify.app');
   final _boundary = GlobalKey();
 
   @override

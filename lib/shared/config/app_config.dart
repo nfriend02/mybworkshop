@@ -9,7 +9,7 @@ class AppConfig {
   static const String defaultIconUrl = '/icons/Icon-512.png';
   static const String defaultGithubUrl =
       'https://github.com/nfriend02/mybworkshop';
-  static const String defaultNetlifyUrl = 'https://mybworkshop.netlify.app';
+  static const String defaultNetlifyUrl = 'https://mybaiworkshop.netlify.app';
 
   static String get apiPrefix => '/api';
 

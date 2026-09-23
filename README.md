@@ -3,7 +3,7 @@
 MyBranch 포트폴리오 브랜치앱. Flutter 웹/모바일, Firebase Firestore, Github → Netlify.
 
 - Github: https://github.com/nfriend02/mybworkshop
-- Netlify: https://mybworkshop.netlify.app
+- Netlify: https://mybaiworkshop.netlify.app
 
 ## 구조
 
@@ -37,7 +37,7 @@ Firebase 초기화에 실패하면 데모 모드로 UI만 열립니다. 기본 �
 
 ## Firebase
 
-- 프로젝트: `mybworkshop`
+- 프로젝트: `mybworkshop-d2b6d` (앱 ID `1:941034192072:web:539a2a4407d960eb6639fd`)
 - 리전: `asia-northeast3`
 - 컬렉션: `jobs`, `uploads` (`createdAt`, `status`)
 - 인덱스: `firestore.indexes.json`
