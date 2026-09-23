@@ -12,21 +12,6 @@ import '../../shared/widgets/fun_feature_button.dart';
 import '../../shared/widgets/scroll_paged_list.dart';
 import '../../shared/widgets/workshop_logo.dart';
 
-const _starterFeed = <String>[
-  '사진 세 장을 이어 깜빡이는 GIF를 만들어 보세요',
-  '프로필 사진을 320px로 가볍게 줄여 보세요',
-  '팀 이름 한 줄로 응원 GIF를 생성해 보세요',
-  '발표 자료를 ZIP으로 묶어 용량을 확인해 보세요',
-  '워크샵 주소로 QR 코드를 만들어 벽에 붙여 보세요',
-  '440Hz 톤으로 박자를 맞추고 WAV로 저장해 보세요',
-  '긴 회의록을 세 문장으로 요약해 보세요',
-  '오늘의 기분을 밈 자막으로 남겨 보세요',
-  '일주일 숫자를 막대 차트로 그려 보세요',
-  '닉네임으로 나만의 파스텔 아바타를 뽑아 보세요',
-  '마크다운 제목을 발표 슬라이드로 넘겨 보세요',
-  '업로드 체크리스트로 전시 정보를 확인해 보세요',
-];
-
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
@@ -94,14 +79,6 @@ class HomePage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Text(
-          '워크샵 피드',
-          style: GoogleFonts.notoSansKr(
-            fontWeight: FontWeight.w900,
-            fontSize: 16,
-          ),
-        ),
-        const SizedBox(height: 8),
         const Expanded(flex: 2, child: _WorkshopFeed()),
       ],
     );
@@ -137,7 +114,9 @@ class _WorkshopFeed extends StatefulWidget {
 
 class _WorkshopFeedState extends State<_WorkshopFeed> {
   List<WorkshopJob>? _jobs;
+  final _selected = <String>{};
   String? _error;
+  var _busy = false;
 
   @override
   void initState() {
@@ -147,16 +126,20 @@ class _WorkshopFeedState extends State<_WorkshopFeed> {
 
   Future<void> _load() async {
     final firestore = context.read<FirestoreService?>();
-    if (firestore == null) return;
+    if (firestore == null) {
+      if (mounted) setState(() => _jobs = []);
+      return;
+    }
     try {
       final rows = await firestore.listPage(
         collection: 'jobs',
         status: null,
-        limit: 30,
+        limit: 100,
       );
       if (!mounted) return;
       setState(() {
         _jobs = rows.map(WorkshopJob.fromMap).toList();
+        _selected.removeWhere((id) => !_jobs!.any((job) => job.id == id));
         _error = null;
       });
     } catch (e) {
@@ -165,39 +148,99 @@ class _WorkshopFeedState extends State<_WorkshopFeed> {
     }
   }
 
+  Future<void> _deleteChecked() async {
+    final ids = _selected.toList();
+    if (ids.isEmpty || _busy) return;
+    final firestore = context.read<FirestoreService?>();
+    if (firestore == null) return;
+    setState(() => _busy = true);
+    try {
+      for (final id in ids) {
+        await firestore.deleteData('jobs', id);
+      }
+      if (!mounted) return;
+      setState(() {
+        _jobs = _jobs?.where((job) => !_selected.contains(job.id)).toList();
+        _selected.clear();
+        _error = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${ids.length}개 기록을 삭제했어요')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final jobs = _jobs;
-    if (jobs != null && jobs.isNotEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_error != null)
-            Text(_error!, style: GoogleFonts.notoSansKr(color: AppTheme.coral)),
-          Expanded(
-            child: ScrollPagedList<WorkshopJob>(
-              items: jobs,
-              itemBuilder: (context, job, index) {
-                return _FeedTile(
-                  index: index,
-                  title: job.title,
-                  subtitle: job.tool,
-                );
-              },
+    final canDelete = _selected.isNotEmpty && !_busy;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Work History',
+              style: GoogleFonts.notoSansKr(
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+              ),
             ),
-          ),
-        ],
-      );
-    }
-
-    return ScrollPagedList<String>(
-      items: _starterFeed,
-      emptyMessage: '아직 피드가 없어요',
-      itemBuilder: (context, tip, index) {
-        return _FeedTile(index: index, title: tip, subtitle: '스타터 ${index + 1}');
-      },
+            const Spacer(),
+            FilledButton(
+              onPressed: canDelete ? _deleteChecked : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.coral,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(_busy ? '삭제 중' : '기록 삭제'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_error != null)
+          Text(_error!, style: GoogleFonts.notoSansKr(color: AppTheme.coral)),
+        Expanded(
+          child: jobs == null
+              ? const Center(child: CircularProgressIndicator())
+              : ScrollPagedList<WorkshopJob>(
+                  items: jobs,
+                  emptyMessage: '아직 기록이 없어요',
+                  itemBuilder: (context, job, index) {
+                    return _FeedTile(
+                      index: index,
+                      title: job.title,
+                      subtitle: _summary(job),
+                      checked: _selected.contains(job.id),
+                      onChecked: (checked) {
+                        setState(() {
+                          if (checked) {
+                            _selected.add(job.id);
+                          } else {
+                            _selected.remove(job.id);
+                          }
+                        });
+                      },
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
+}
+
+String _summary(WorkshopJob job) {
+  final detail = job.detail.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (detail.isNotEmpty) return detail;
+  final tool = toolForPath('/${job.tool}');
+  if (tool.path != '/') return tool.label;
+  return job.tool;
 }
 
 class _FeedTile extends StatelessWidget {
@@ -205,16 +248,20 @@ class _FeedTile extends StatelessWidget {
     required this.index,
     required this.title,
     required this.subtitle,
+    required this.checked,
+    required this.onChecked,
   });
 
   final int index;
   final String title;
   final String subtitle;
+  final bool checked;
+  final ValueChanged<bool> onChecked;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(14, 8, 4, 8),
       decoration: AppTheme.card(tint: AppTheme.lavender),
       child: Row(
         children: [
@@ -232,10 +279,14 @@ class _FeedTile extends StatelessWidget {
               children: [
                 Text(
                   title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w800),
                 ),
                 Text(
                   subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.notoSansKr(
                     fontSize: 12,
                     color: AppTheme.muted,
@@ -243,6 +294,10 @@ class _FeedTile extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+          Checkbox(
+            value: checked,
+            onChanged: (value) => onChecked(value ?? false),
           ),
         ],
       ),

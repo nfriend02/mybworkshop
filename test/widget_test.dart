@@ -61,6 +61,8 @@ void main() {
     expect(find.text('My AI Workshop'), findsWidgets);
     expect(find.text('나의 AI 워크샵'), findsWidgets);
     expect(find.text('GIF 편집기'), findsWidgets);
+    expect(find.text('Work History'), findsOneWidget);
+    expect(find.text('기록 삭제'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   });
