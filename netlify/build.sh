@@ -9,9 +9,19 @@ if [ ! -d "$FLUTTER_DIR" ]; then
   git clone https://github.com/flutter/flutter.git -b "$FLUTTER_VERSION" --depth 1 "$FLUTTER_DIR"
 fi
 
+if ! command -v unzip >/dev/null 2>&1; then
+  if command -v sudo >/dev/null 2>&1; then
+    sudo apt-get update
+    sudo apt-get install -y unzip xz-utils zip
+  else
+    apt-get update
+    apt-get install -y unzip xz-utils zip
+  fi
+fi
+
 export PATH="$FLUTTER_DIR/bin:$PATH"
-flutter config --enable-web
 flutter --version
+flutter precache --web
 
 mkdir -p assets/config
 cat > assets/config/app.env <<EOF
